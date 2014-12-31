@@ -233,7 +233,7 @@ class ISPConfigJsonWrapper {
 		// Check for the method
 		if (in_array($strMethod, get_class_methods($this->mHandlerClass)) === false) {
 			// We're done
-			$this->fault('MethodNotFound('.$strMethod.')', 'The handler class does not contain the "'.$strMethod.'".');
+			return $this->fault('MethodNotFound('.$strMethod.')', 'The handler class does not contain the "'.$strMethod.'".');
 		}
 	}
 
@@ -248,19 +248,24 @@ class ISPConfigJsonWrapper {
 		// Iterate over the parameters
 		foreach (func_get_args() as $strKey) {
 			// Check for a method
-			if (($strKey === 'method') && (array_key_exists($strKey, $_GET) === false)) {
+			if (($strKey === 'method')) {
+				// Check for the method key
+				 if (array_key_exists($strKey, $_GET) === false) {
+					// We're done
+					return $this->fault('MethodNotFound', 'You must provide a method key in the URL parameters with the name of the method you wish to execute.');
+				}
 				// We're done
-				$this->fault('MethodNotFound', 'You must provide a method key in the URL parameters with the name of the method you wish to execute.');
+				return;
 			} else {
 				// Check for the key in the JSONP request
 				if (($this->mRequestType === ISPConfigJsonWrapper::RequestJSONP)  && (array_key_exists($strKey, $_GET) === false)) {
 					// We're done
-					$this->fault('RequiredParameterNotFound('.$strKey.')', 'Missing required parameter "'.$strKey.'" in your URL parameters.');
+					return $this->fault('RequiredParameterNotFound('.$strKey.')', 'Missing required parameter "'.$strKey.'" in your URL parameters.');
 				}
 				// Check for the key in the JSON request
 				if (($this->mRequestType === ISPConfigJsonWrapper::RequestJSON) && (array_key_exists($strKey, $_POST) === false)) {
 					// We're done
-					$this->fault('RequiredParameterNotFount('.$strKey.')', 'Missing required parameter "'.$strKey.'" in your POST data.');
+					return $this->fault('RequiredParameterNotFount('.$strKey.')', 'Missing required parameter "'.$strKey.'" in your POST data.');
 				}
 			}
 		}
@@ -285,7 +290,7 @@ class ISPConfigJsonWrapper {
 			// Make sure the parameter exists if it is required
 			if (($refParameter->isOptional() === false) && (array_key_exists($refParameter->getName(), $this->mRequestParams) === false)) {
 				// We're done
-				$this->fault('MissingRequiredParameter('.$refParameter->getName().')', 'Missing required parameter "'.$refParameter->getName().'".');
+				return $this->fault('MissingRequiredParameter('.$refParameter->getName().')', 'Missing required parameter "'.$refParameter->getName().'".');
 			}
 			// Set the parameter into the array
 			$arrArguments[$refParameter->getPosition()] = $this->mRequestParams[$this->cleanRequestParameter($refParameter->getName())];
@@ -382,7 +387,7 @@ class ISPConfigJsonWrapper {
 			);
 		} catch (Exception $clsException) {
 			// We're done
-			$this->fault($clsException->getCode(), $clsException->getMessage());
+			return $this->fault($clsException->getCode(), $clsException->getMessage());
 		}
 		// We're done
 		return $this->sendResponse();
