@@ -24,23 +24,29 @@
  */
 
 // Include the configuration library
-require_once '../../lib/config.inc.php';
+require_once(dirname(__FILE__).'/../../lib/config.inc.php');
 // Do not start sessions
 $conf['start_session'] = false;
 // Include the application library
-require_once '../../lib/app.inc.php';
+require_once(dirname(__FILE__).'/../../lib/app.inc.php');
 // Include the JSON wrapper
 require_once(dirname(__FILE__).'/ISPConfigJsonWrapper.php');
-// Check for demo mode
-if($conf['demo_mode'] == true) $app->error('This function is disabled in demo mode.');
+// Instantiate the JSON API
+$server = new ISPConfigJSonWrapper();
 // Load the app and configuration
 $app->load('remoting,getconf');
+// Check for demo mode
+if($conf['demo_mode'] == true) {
+	// Send the fault
+	$server->fault('FunctionNotAllowed', 'This function is disabled in demo mode.');
+}
 // Configure the permissions
 $security_config = $app->getconf->get_security_config('permissions');
 // Check for remote access
-if($security_config['remote_api_allowed'] != 'yes') die('Remote API is disabled in security settings.');
-// Instantiate the JSON API
-$server = new ISPConfigJSonWrapper();
+if($security_config['remote_api_allowed'] != 'yes') {
+	// Send the fault
+	$server->fault('ApiDisabled', 'Remote API is disabled in security settings.');
+}
 // Set the class into the wrapper
 $server->setHandlerClass('remoting');
 // Execute the API

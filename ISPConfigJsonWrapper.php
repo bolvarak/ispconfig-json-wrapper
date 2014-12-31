@@ -190,6 +190,17 @@ class ISPConfigJsonWrapper {
 	}
 
 	/**
+	 * This method cleans the request data
+	 * @access protected
+	 * @param array|boolean|double|float|integer|number|string $mixValue
+	 * @return array|boolean|double|float|integer|number|string
+	 */
+	protected function cleanRequestParameter($mixValue) {
+		// Return the sanitized parameter
+		return strip_tags($mixValue);
+	}
+
+	/**
 	 * This method determines the request type
 	 * @access protected
 	 * @return ISPConfigJsonWrapper ISPConfigJsonWrapper::$mInstance
@@ -215,76 +226,54 @@ class ISPConfigJsonWrapper {
 	 * This method ensures that the requested method exists in the handler class
 	 * @access protected
 	 * @param string $strMethod
-	 * @return boolean
+	 * @return void
+	 * @uses ISPConfigJsonWrapper::fault()
 	 */
 	protected function ensureMethodExists($strMethod) {
 		// Check for the method
 		if (in_array($strMethod, get_class_methods($this->mHandlerClass)) === false) {
-			// Set the error message
-			$this->mResponse = array(
-				'success' => false,
-				'error'   => 'The handler class does not contain the "'.$strMethod.'".',
-				'code'    => 'MethodNotFound('.$strMethod.')'
-			);
 			// We're done
-			return false;
+			$this->fault('MethodNotFound('.$strMethod.')', 'The handler class does not contain the "'.$strMethod.'".');
 		}
-		// We're done
-		return true;
 	}
 
 	/**
 	 * This method makes sure that we have all of the required parameters needed for a successful request
 	 * @access protected
 	 * @param string $strParam...
-	 * @return boolean
+	 * @return void
+	 * @uses ISPConfigJsonWrapper::fault()
 	 */
 	protected function ensureParameters() {
 		// Iterate over the parameters
 		foreach (func_get_args() as $strKey) {
 			// Check for a method
 			if (($strKey === 'method') && (array_key_exists($strKey, $_GET) === false)) {
-				// Set the response
-				$this->mResponse = array(
-					'success' => false,
-					'error'   => 'You must provide a method key in the URL parameters with the name of the method you wish to execute.',
-					'code'    => 'MethodNotFound'
-				);
 				// We're done
-				return false;
+				$this->fault('MethodNotFound', 'You must provide a method key in the URL parameters with the name of the method you wish to execute.');
 			} else {
 				// Check for the key in the JSONP request
 				if (($this->mRequestType === ISPConfigJsonWrapper::RequestJSONP)  && (array_key_exists($strKey, $_GET) === false)) {
-					// Set the response
-					$this->mResponse = array(
-						'success' => false,
-						'error'   => 'Missing required parameter "'.$strKey.'" in your URL parameters.',
-						'code'    => 'RequiredParameterNotFound('.$strKey.')'
-					);
 					// We're done
-					return false;
+					$this->fault('RequiredParameterNotFound('.$strKey.')', 'Missing required parameter "'.$strKey.'" in your URL parameters.');
 				}
 				// Check for the key in the JSON request
-				if (($this->mRequestType === ISPConfigJsonWrapper::RequestJSON) && (array_key_exists($strKey, $_GET) === false)) {
-					// Set the response
-					$this->mResponse = array(
-						'success' => false,
-						'error'   => 'Missing required parameter "'.$strKey.'" in your POST data.',
-						'code'    => 'RequiredParameterNotFount('.$strKey.')'
-					);
+				if (($this->mRequestType === ISPConfigJsonWrapper::RequestJSON) && (array_key_exists($strKey, $_POST) === false)) {
 					// We're done
-					return false;
+					$this->fault('RequiredParameterNotFount('.$strKey.')', 'Missing required parameter "'.$strKey.'" in your POST data.');
 				}
 			}
 		}
-		// We're done
-		return true;
 	}
 
 	/**
 	 * This method converts the request parameters to the proper argument positions
 	 * @access protected
-	 * @return boolean|array
+	 * @return array
+	 * @uses ISPConfigJsonWrapper::cleanRequestParameter()
+	 * @uses ISPConfigJsonWrapper::fault()
+	 * @uses ReflectionMethod
+	 * @uses ReflectionParameter
 	 */
 	protected function requestToArgs() {
 		// Create the arguments placeholder
@@ -295,17 +284,11 @@ class ISPConfigJsonWrapper {
 		foreach ($refMethod->getParameters() as $refParameter) {
 			// Make sure the parameter exists if it is required
 			if (($refParameter->isOptional() === false) && (array_key_exists($refParameter->getName(), $this->mRequestParams) === false)) {
-				// Set the response
-				$this->mResponse = array(
-					'success' => false,
-					'error'   => 'Missing required parameter "'.$refParameter->getName().'".',
-					'code'    => 'MissingRequiredParameter('.$refParameter->getName().')'
-				);
 				// We're done
-				return false;
+				$this->fault('MissingRequiredParameter('.$refParameter->getName().')', 'Missing required parameter "'.$refParameter->getName().'".');
 			}
 			// Set the parameter into the array
-			$arrArguments[$refParameter->getPosition()] = $this->mRequestParams[$refParameter->getName()];
+			$arrArguments[$refParameter->getPosition()] = $this->mRequestParams[$this->cleanRequestParameter($refParameter->getName())];
 		}
 		// Return the arguments
 		return $arrArguments;
@@ -366,6 +349,7 @@ class ISPConfigJsonWrapper {
 	 * @uses ISPConfigJsonWrapper::determineRequestType()
 	 * @uses ISPConfigJsonWrapper::ensureMethodExists()
 	 * @uses ISPConfigJsonWrapper::ensureParameters()
+	 * @uses ISPConfigJsonWrapper::fault()
 	 * @uses ISPConfigJsonWrapper::requestToArgs()
 	 * @uses ISPConfigJsonWrapper::sendResponse()
 	 */
@@ -375,10 +359,7 @@ class ISPConfigJsonWrapper {
 		// Determine the request type
 		$this->determineRequestType();
 		// Make sure we have the required parameters
-		if ($this->ensureParameters('method') === false) {
-			// We're done
-			return $this->sendResponse();
-		}
+		$this->ensureParameters('method');
 		// Check for the API Method Map
 		if (preg_match(ISPConfigJsonWrapper::MapMethodPattern, $_GET['method'])) {
 			// Set the response
@@ -387,19 +368,11 @@ class ISPConfigJsonWrapper {
 			return $this->sendResponse();
 		}
 		// Ensure the method exists
-		if ($this->ensureMethodExists($_GET['method']) === false) {
-			// We're done
-			return $this->sendResponse();
-		}
+		$this->ensureMethodExists($_GET['method']);
 		// Try the execution
 		try {
 			// Grab the arguments
 			$arrArguments    = $this->requestToArgs();
-			// Check for errors
-			if (is_bool($arrArguments)) {
-				// We're done
-				return $this->sendResponse();
-			}
 			// Execute the method
 			$mixResponse     = call_user_func_array(array($this->mHandlerClass, $_GET['method']), $arrArguments);
 			// Set the response
@@ -408,12 +381,8 @@ class ISPConfigJsonWrapper {
 				'response' => $mixResponse
 			);
 		} catch (Exception $clsException) {
-			// Set the exception into the response
-			$this->mResponse = array(
-				'success' => false,
-				'error'   => $clsException->getMessage(),
-				'code'    => $clsException->getCode()
-			);
+			// We're done
+			$this->fault($clsException->getCode(), $clsException->getMessage());
 		}
 		// We're done
 		return $this->sendResponse();
@@ -458,4 +427,3 @@ class ISPConfigJsonWrapper {
 	 */
 	public function setResponse(array $arrResponse) { $this->mResponse     = $arrResponse;    return $this; }
 }
-
